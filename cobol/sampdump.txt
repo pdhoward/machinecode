@@ -1,5 +1,3 @@
-cobol program:
-
 IDENTIFICATION DIVISION.
 PROGRAM-ID.     SAMPDUMP.
 
