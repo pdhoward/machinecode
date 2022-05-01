@@ -1,0 +1,153 @@
+///////////////////////////////////////////////////////////////
+////////           kafka to redis connect              ///////
+//////            mainline processing                 ///////
+////// c strategic machines 2018 all rights reserved ///////
+///////////////////////////////////////////////////////////
+
+const express =               require('express');
+const cors =                  require('cors')
+const { createServer } =      require('http');
+const serverTiming =          require('server-timing');
+const path =                  require('path');
+const mongoose =              require('mongoose')
+const logger =                require('morgan')
+const helmet =                require('helmet')
+const rateLimit =             require("express-rate-limit");
+const conn =                  require('../db/connections')
+const {queue} =               require("../controllers");
+const { g, b, gr, r, y } =    require('../console');
+
+// Express app
+const app = express();
+const server = createServer(app);
+
+//////////////////////////////////////////////////////////////////////////
+////////////////////  Register Middleware       /////////////////////////
+////////////////////////////////////////////////////////////////////////
+
+// https://www.npmjs.com/package/limiter
+const limiter = rateLimit({
+  windowMs: 1 * 15 * 1000,
+  max: 6 // limit calls to 6 per 15 minute window
+});
+app.use('/api/v1/chat/fn/', limiter);
+app.use(cors())
+app.use(helmet())
+app.use(logger('dev'))
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }));
+app.use(serverTiming()); 
+
+// Serve up static assets 
+if (process.env.NODE_ENV === "production") {
+    app.use(express.static("client/build"));
+  }
+
+const isDev = (app.get('env') === 'development');
+console.log('isDev: ' + isDev);
+
+//////////////////////////////////////////////////////////////////
+////////////  Event Registration for streams and db      ////////
+////////////////////////////////////////////////////////////////
+
+const {wss} = require('../events');
+
+server.on('upgrade', (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (socket) => {
+        wss.emit('connection', socket, request);
+    });     
+})
+
+// status of streaming service
+let toggle = {
+    state: false
+  }
+  
+const toggleState = (req, res, next) => { 
+  if (toggle.state) {
+    toggle.state = false
+  } else {
+    toggle.state = true
+  }
+  next()
+}
+
+mongoose
+  .connect(process.env.DB)
+  .then(() => console.log(b(`Database connected successfully`)))
+  .catch((err) => console.log(err));
+mongoose.Promise = global.Promise;
+
+// seed known db connections - avoid routes overrunning conn()
+conn(process.env.DB)
+ 
+ //////////////////////////////////////////////////////
+ ////////// Register and Config Routes ///////////////
+ ////////////////////////////////////////////////////
+const about =               express.Router()
+const api =                 express.Router()
+const chat =                express.Router()
+const convertcode =         express.Router()
+const header =              express.Router()
+const portfolios =          express.Router({mergeParams: true})
+const algorithms =          express.Router({mergeParams: true})
+const schemas =             express.Router({mergeParams: true})
+const signal =              express.Router({mergeParams: true})
+const topics =              express.Router({mergeParams: true})
+const validate =            express.Router({mergeParams: true})
+
+require('../routes/about')(about)
+require('../routes/api')(api)
+require('../routes/chat')(chat)
+require('../routes/convertcode')(convertcode)
+require('../routes/header')(header)
+require('../routes/portfolios')(portfolios)
+require('../routes/algorithms')(algorithms)
+require('../routes/schemas')(schemas)
+require('../routes/signal')(signal)
+require('../routes/topics')(topics)
+require('../routes/validate')(validate)
+
+/////////////////////////////////////////////////////////
+/////////////////// API CATALOGUE //////////////////////
+///////////////////////////////////////////////////////
+
+app.use(header)
+
+app.use("/api/validate", [validate])
+
+app.use("/api/v1", [api, chat, convertcode]);
+
+app.get('/about', about)
+
+app.get('/api/toggle', (req, res, next) => { 
+    res.json(toggle)
+    next()
+  })
+
+app.post('/api/portfolios', [portfolios])
+
+app.post('/api/signal', [toggleState, signal])
+
+app.post('/api/schemas/', [schemas])
+
+app.post('/api/algorithms/', [algorithms])
+
+//app.get('/api/topics/:topic', [topics])
+
+// app.get('/*', function(req,res) {  
+//   if (!res.headersSent) {
+//     res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+//   } 
+// });
+
+exports.start = async (port) => {
+  queue.initializePriorityQueue();
+	const server = createServer(app);
+
+	//await kafka.Connect();
+
+	return new Promise((resolve, reject) => {
+		server.listen(port, resolve);
+	});
+};
