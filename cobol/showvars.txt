@@ -18,6 +18,9 @@
        procedure division using the-values.
 
            display "<table cellpadding=10 border=1 cellspacing=4 bgcolor=lightgray>"
+           
+            move "hello world" to the-values 
+           display query-values(1)
 
            perform varying ctr from 1 by 1
              until ctr > 10
