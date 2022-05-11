@@ -1,0 +1,146 @@
+**********************************************************************
+*                                                                    *
+*     PLI example                                                    *
+*                                                                    *
+**********************************************************************
+ BPGPLI: PROCEDURE OPTIONS(MAIN);                                       00010023
+                                                                        00020002
+  %INCLUDE SYSLIB(CSRBPPLI);                                            00020122
+                                                                        00020222
+     /* INITs */                                                        00021013
+ DCL M INIT(512) FIXED BIN(31);                                         00022035
+ DCL N INIT(512) FIXED BIN(31);                                         00023035
+ DCL P INIT(512) FIXED BIN(31);                                         00024035
+                                                                        00025013
+     /* Arrays */                                                       00026013
+ DCL A (M,N) BIN FIXED(31);           /* First array                 */ 00029113
+ DCL B (N,P) BIN FIXED(31);           /* Second array                */ 00029213
+ DCL C (M,P) BIN FIXED(31);           /* Product of first and second */ 00029313
+ DCL KELEMENT_SIZE INIT(4) FIXED BIN(31); /* Size of an element of an   00029416
+                                         array. This value is tied      00029513
+                                         directly to the data type of   00029613
+                                         the three arrays (ie. FIXED(31)00029713
+                                         is 4 bytes                  */ 00029813
+                                                                        00029913
+     /* Indices */                                                      00030013
+ DCL I FIXED BIN(31),                                                   00031013
+     J FIXED BIN(31),                                                   00031113
+     K FIXED BIN(31);                                                   00031213
+                                                                        00032013
+     /* Others */                                                       00037013
+ DCL RC FIXED BIN(31);                                                  00039013
+ DCL RSN FIXED BIN(31);                                                 00039113
+                                                                        00390108
+                                                                        00391808
+     /* Initialize the first two arrays such that each element          00411013
+        equals the sum of the indices for that element (eg.             00412013
+        A(4,10) = 14 */                                                 00413013
+                                                                        00414013
+ CALL CSRIRP (A(1,1), M*N*KELEMENT_SIZE, CSR_FORWARD,                   00415013
+         KELEMENT_SIZE*N,                                               00416013
+         0,                                                             00417013
+         20,                                                            00418013
+         RC,                                                            00419013
+         RSN);                                                          00419113
+ CALL CSRIRP (B(1,1), N*P*KELEMENT_SIZE, CSR_FORWARD,                   00419913
+         KELEMENT_SIZE*P,                                               00420013
+         0,                                                             00420113
+         20,                                                            00420213
+         RC,                                                            00420313
+         RSN);                                                          00420413
+ DO I = 1 TO M;                                                         00421213
+   DO J = 1 TO N;                                                       00421313
+     A(I,J) = I + J;                                                    00421413
+   END;                                                                 00421513
+ END;                                                                   00421613
+                                                                        00421713
+ DO I = 1 TO N;                                                         00421813
+   DO J = 1 TO P;                                                       00421913
+     B(I,J) = I + J;                                                    00422013
+   END;                                                                 00422113
+ END;                                                                   00422213
+ CALL CSRRRP (A(1,1), M*N*KELEMENT_SIZE,                                00422313
+         RC,                                                            00422513
+         RSN);                                                          00422613
+ CALL CSRRRP (B(1,1), N*P*KELEMENT_SIZE,                                00423413
+         RC,                                                            00423613
+         RSN);                                                          00423713
+                                                                        00424513
+     /* Multiply the two arrays together */                             00424613
+                                                                        00424713
+ CALL CSRIRP (A(1,1), M*N*KELEMENT_SIZE, CSR_FORWARD,                   00424813
+         KELEMENT_SIZE*N,                                               00424913
+         0,                                                             00425013
+         20,                                                            00425133
+         RC,                                                            00425213
+         RSN);                                                          00425313
+ CALL CSRIRP (B(1,1), N*P*KELEMENT_SIZE, CSR_FORWARD,                   00426113
+         KELEMENT_SIZE,                                                 00426213
+         (P-1)*KELEMENT_SIZE,                                           00426313
+         50,                                                            00426413
+         RC,                                                            00426513
+         RSN);                                                          00426613
+ DO I = 1 TO M;                                                         00427413
+   DO J = 1 TO P;                                                       00427513
+     C(I,J) = 0;                                                        00427613
+     DO K = 1 TO N;                                                     00427713
+       C(I,J) = C(I,J) + A(I,K) * B(K,J);                               00427813
+     END;                                                               00427913
+   END;                                                                 00428013
+ END;                                                                   00428113
+                                                                        00428213
+ CALL CSRRRP (A(1,1), M*N*KELEMENT_SIZE,                                00428313
+         RC,                                                            00428513
+         RSN);                                                          00428613
+ CALL CSRRRP (B(1,1), N*P*KELEMENT_SIZE,                                00429413
+         RC,                                                            00429613
+         RSN);                                                          00429713
+                                                                        00430513
+ END BPGPLI;                                                            01080024
+***********************************************************************
+*                                                                     *
+*                                                                     *
+*      JCL TO COMPILE AND LINKEDIT.                                   *
+*                                                                     *
+*                                                                     *
+*                                                                     *
+***********************************************************************
+//PLIJOB JOB                                                            00010007
+//*                                                                     00041001
+//*  PL/I Compile and Linkedit                                          00042001
+//*                                                                     00043001
+//*  Change all CRTPLNx to CRTPLNy                                      00044001
+//*                                                                     00045001
+//GO EXEC PLIXCL,PARM.PLI='MACRO'                                       00050000
+//PLI.SYSLIB DD DSN=REFPAT.DECLARE.SET,DISP=SHR
+//PLI.SYSIN DD DSN=REFPAT.SAMPLE.PROG(PLI),DISP=SHR                     00060008
+//LKED.SYSLMOD DD DSN=REFPAT.USER.LOAD,UNIT=3380,VOL=SER=RSMPAK,        00070000
+// DISP=SHR                                                             00080000
+//LKED.SYSIN DD *                                                       00090000
+  INCLUDE  IN(CSRIRP,CSRRRP)                                            00100001
+  NAME BPGPLI(R)                                                        00110008
+/*                                                                      00120000
+//*                                                                     00121001
+//*     SYS1.CSSLIB is source of CSR stubs                              00130001
+//*                                                                     00190000
+//LKED.IN     DD DSN=SYS1.CSSLIB,DISP=SHR                               00200000
+//PLIJOB JOB                                                            00010007
+***********************************************************************
+*                                                                     *
+*                                                                     *
+*      JCL TO EXECUTE.                                                *
+*                                                                     *
+*                                                                     *
+*                                                                     *
+***********************************************************************
+//PLIRUN   JOB MSGLEVEL=(1,1),TIME=1440                                 00010000
+//*                                                                     00011001
+//*   EXECUTE A PL/I TESTCASE - CHANGE NAME ON NEXT LINE                00012001
+//*                                                                     00013001
+//GO       EXEC PGM=CRTPLN3                                             00020000
+//STEPLIB  DD  DSN=REFPAT.USER.LOAD,DISP=SHR,                           00030000
+//     UNIT=3380,VOL=SER=VM2TSO                                         00040000
+//         DD DSN=CEE.SCEERUN,DISP=SHR                                  0
+//SYSABEND DD SYSOUT=*                                                  00070000
+//SYSLOUT  DD  SYSOUT=*                                                 00080000
+//SYSPRINT DD  SYSOUT=*                                                 00090000

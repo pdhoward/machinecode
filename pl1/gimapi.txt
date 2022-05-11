@@ -1,0 +1,207 @@
+
+
+MAIN:
+  PROC OPTIONS(MAIN) REORDER;
+
+ %INCLUDE GIMMPLI;
+
+ DCL QUERY CHAR(8)  INIT('QUERY');
+ DCL FREE  CHAR(8)  INIT('FREE');
+ DCL TXT_VER   CHAR(12) INIT('VER');
+ DCL APILANG CHAR(3) INIT('ENU');
+
+ DCL GIMAPI ENTRY(CHAR(8),PTR,PTR,CHAR(3),FIXED BIN(31),
+                  FIXED BIN(31),PTR)
+                EXTERNAL OPTIONS(ASSEMBLER,INTER);
+
+ DCL SYSNULL BUILTIN;
+ DCL ADDR    BUILTIN;
+ DCL SUBSTR  BUILTIN;
+
+ DCL (RC,CC) FIXED BIN(31) INIT(0);
+
+ DCL QPARMS POINTER;
+ DCL MSGBUFF  POINTER;
+
+ DCL QRESULT POINTER;
+ DCL NULLPTR POINTER;
+
+ DCL CSISTR     CHAR(44);
+ DCL ZONESTR    CHAR(100);
+ DCL ENTRYSTR   CHAR(100);
+ DCL SUBENTSTR  CHAR(100);
+ DCL FILTERSTR  CHAR(150);
+ /********************************************************************/
+ /*                                                                  */
+ /*  SET ADDRESS OF QUERY PARAMETERS TO THE QPARMS VAR               */
+ /*                                                                  */
+ /********************************************************************/
+
+ QPARMS = ADDR(QUERY_PARMS);
+
+ /********************************************************************/
+ /*                                                                  */
+ /*  LOAD GIMAPI LOAD MODULE                                         */
+ /*                                                                  */
+ /********************************************************************/
+
+ FETCH GIMAPI;
+
+ /********************************************************************/
+ /*                                                                  */
+ /*  PLUG QUERY PARMS INTO THE QUERY STRUCTURE                       */
+ /*                                                                  */
+ /********************************************************************/
+ CSISTR    = 'SMP.VSAM.CSI';
+ ZONESTR   = 'ALLTZONES';
+ ENTRYSTR  = 'SYSMOD';
+ SUBENTSTR = 'MOD, INSTALLDATE';
+ SUBSTR(FILTERSTR,1,41) = '(SMODTYPE=''PTF'' | SMODTYPE=''USERMOD'')';
+ SUBSTR(FILTERSTR,42,19) = ' & FMID=''HMP1E00''';
+ SUBSTR(FILTERSTR,61,16) = ' & APPLY=''YES''';
+ SUBSTR(FILTERSTR,77,37) = ' & BYPASS=''YES'' & RECDATE>''07335''';
+
+ CSI          = ADDR(CSISTR);
+ CSILEN       = 12;
+ ZONE         = ADDR(ZONESTR);
+ ZONELEN      = 9;
+ ENTRYTYPE    = ADDR(ENTRYSTR);
+ ENTRYLEN     = 6;
+ SUBENTRYTYPE = ADDR(SUBENTSTR);
+ SUBENTRYLEN  = 16;
+ FILTER       = ADDR(FILTERSTR);
+ FILTERLEN    = 113;
+
+ CALL GIMAPI(QUERY,QPARMS,QRESULT,APILANG,RC,CC,MSGBUFF);
+
+ /****************************************/
+ /* PRINT ANY ERROR MESSAGES ENCOUNTERED */
+ /****************************************/
+ IF RC ¬=0
+   THEN CALL ERRPRINT(QUERY);
+
+ /******************************************************************/
+ /* CALL ROUTINE TO PRINT RESULTS OF QUERY IF QUERY WAS SUCCESSFUL */
+ /******************************************************************/
+ IF RC<=4
+   THEN CALL RESPRINT;
+
+ /****************************************/
+ /* FREE STORAGE RETURNED FROM THE QUERY */
+ /****************************************/
+ CALL GIMAPI(FREE,NULLPTR,NULLPTR,APILANG,RC,CC,MSGBUFF);
+
+ EXIT:
+   RELEASE GIMAPI;
+
+ /******************************************************************/
+ /* INTERNAL SUBROUTINES FOLLOW                                    */
+ /******************************************************************/
+ RESPRINT:  PROCEDURE;
+
+  DCL CURETYPE    POINTER;
+  DCL CURENTRY    POINTER;
+  DCL CURSUBENT   POINTER;
+  DCL CURVER      POINTER;
+  DCL CURVSUB     POINTER;
+  DCL PRTITEM     POINTER;
+
+  /********************************/
+  /* LOOP THROUGH EACH ENTRY TYPE */
+  /********************************/
+  CURETYPE = QRESULT;                 /* POINT TO HEAD OF LIST */
+  DO WHILE (CURETYPE¬=SYSNULL);
+    /* PRINT NAME OF ENTRY BEING PROCESSED */
+    PUT EDIT('Entry Type: ',CURETYPE->ENTRY_LIST.TYPE)
+            (SKIP,A(12),A(15));
+    /********************************************************/
+    /* LOOP THROUGH EACH ENTRY PRINTING THE ENAME AND ZONE  */
+    /* THEN THE LIST OF SUBENTRY VALUES.                    */
+    /********************************************************/
+    CURENTRY = CURETYPE->ENTRIES;
+    DO WHILE (CURENTRY¬=SYSNULL);
+      PUT SKIP LIST('----------------------------------------');
+      PUT EDIT('ENAME',':',CURENTRY->CSI_ENTRY.ENTRYNAME)
+              (SKIP,X(2),A(5),X(10),A(1),X(1),A(8));
+      PUT EDIT('ZONE',':',CURENTRY->CSI_ENTRY.ZONENAME)
+              (SKIP,X(2),A(4),X(11),A(1),X(1),A(7));
+
+      CURSUBENT=CURENTRY->SUBENTRIES;
+      DO WHILE (CURSUBENT¬=SYSNULL);
+        IF CURSUBENT->SUBENTRY.TYPE=TXT_VER THEN DO;
+          CURVER=CURSUBENT->SUBENTRYDATA;
+          DO WHILE (CURVER¬=SYSNULL);
+            CURVSUB=CURVER->VERDATA;
+            DO WHILE (CURVSUB¬=SYSNULL);
+              PUT EDIT(CURVSUB->SUBENTRY.TYPE,'VER(',
+                       CURVER->VERNUM,'):')
+                      (SKIP,X(2),A(6),X(1),A(4),A(3),A(2),X(1));
+              PRTITEM=CURVSUB->SUBENTRYDATA;
+              CALL VALPRINT(PRTITEM);
+              CURVSUB=CURVSUB->SUBENTRY.NEXT;
+            END;
+            CURVER=CURVER->VER.NEXT;
+          END;
+        END; /* End Process VER type subentries */
+        ELSE DO;
+          PUT EDIT(CURSUBENT->SUBENTRY.TYPE,':')
+                  (SKIP,X(2),A(15),A(1),X(1));
+          PRTITEM=CURSUBENT->SUBENTRYDATA;
+          CALL VALPRINT(PRTITEM);
+        END; /* End non-VER type subentries */
+
+
+        CURSUBENT = CURSUBENT->SUBENTRY.NEXT;
+      END; /* END SUBENT TYPE LOOP */
+
+      CURENTRY = CURENTRY->CSI_ENTRY.NEXT; /* GET NEXT ENTRY */
+    END; /* END ENTRY LOOP */
+    PUT SKIP;
+    CURETYPE = CURETYPE->ENTRY_LIST.NEXT;   /* GET NEXT ENTRY TYPE */
+  END; /* END ENTRY TYPE LOOP */
+
+ END  RESPRINT;
+
+ VALPRINT:  PROCEDURE(ITEM1);
+  DCL ITEM1       POINTER;
+  DCL CURITEM     POINTER;
+  DCL BUFFPTR     POINTER;
+  DCL DATABUFF    CHAR(500) BASED(BUFFPTR);
+
+  CURITEM = ITEM1;
+  DO WHILE (CURITEM ¬=SYSNULL);
+    BUFFPTR = CURITEM->DATA;
+    PUT EDIT(SUBSTR(BUFFPTR->DATABUFF,1,CURITEM->DATALEN))
+            (X(1),A);
+
+    CURITEM = CURITEM->ITEM_LIST.NEXT; /* GET NEXT DATA VALUE */
+    IF CURITEM¬=SYSNULL /* LINE UP NEXT VALUE IF THERE IS ONE */
+      THEN PUT SKIP LIST('                 ');
+  END; /* END DATA ITEM LOOP */
+
+ END VALPRINT;
+
+ ERRPRINT:  PROCEDURE(CMD);
+  DCL CMD  CHAR(8);
+
+  DCL CURMSG POINTER;
+  DCL TEXTPTR     POINTER;
+  DCL MSGTEXT     CHAR(256) BASED(TEXTPTR);
+
+
+  PUT EDIT('Error processing command: ',CMD,'.  ','RC=',RC,'CC=',CC)
+          (SKIP,A(26),A(8),A(3),A(3),F(5),X(2),A(3),F(5));
+  IF MSGBUFF¬=SYSNULL THEN
+  DO;
+   PUT SKIP LIST('MESSAGES FOLLOW:');
+   CURMSG = MSGBUFF;
+   DO WHILE (CURMSG¬=SYSNULL);
+     TEXTPTR = CURMSG->DATA;
+     PUT SKIP LIST(SUBSTR(TEXTPTR->MSGTEXT,1,CURMSG->DATALEN));
+     CURMSG = CURMSG->ITEM_LIST.NEXT;
+   END;
+  END;
+   ELSE
+    PUT SKIP LIST('NO MESSAGES RETURNED');
+ END  ERRPRINT;
+ END MAIN;

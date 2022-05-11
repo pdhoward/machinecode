@@ -1,0 +1,88 @@
+
+
+filename: sample1.sqp
+
+sample1: proc options(main);
+
+/*                                                  */
+/* This program shows the usage of host-variables,  */ 
+/* indicators, and some common SQL statements       */
+
+/* The database this program uses is the IBMSAMPL   */ 
+/* database that your DB2 product uses. You must be */
+/* able to run the IBM DB2 demo sample program in   */ 
+/* order to be able to run this program.            */
+/*                                                  */
+
+dcl idx fixed bin(15);
+dcl errmsg character(200); 
+dcl msg_len fixed bin(15);
+
+exec sql include sqlca;
+
+exec sql begin declare section;
+   dcl cnt fixed bin(15); 
+   dcl projno char(6);
+   dcl projname char(24) varying;
+   dcl deptno char(6);  
+   dcl respemp char(6);
+
+   dcl prstaff float bin(24);
+   dcl prstaff_ind fixed bin(15);
+
+   dcl prstdate char(10);
+   dcl prstdate_ind fixed bin(15);
+
+   dcl prendate char(10);
+   dcl prendate_ind fixed bin(15);
+
+   dcl majproj char(6);
+   dcl majproj_ind fixed bin(15); 
+exec sql end declare section;
+
+/* Set up error label for all SQL statements. */ 
+exec sql whenever sqlerror goto err_label;
+
+/* Connect to the IBM DB2 sample demo data base */ 
+exec sql connect to IBMSAMPL;
+
+/* Determine how many rows are in table project. */ 
+exec SQL SELECT COUNT(*) INTO :cnt from project;
+
+put skip edit('Number of rows in table project:', cnt) (a(40),x,f(3,0)); 
+put skip list('All the rows for project are:');
+put skip;
+
+/* Declare and use a cursor to fetch each row. */ 
+exec sql declare cl cursor for
+  select projno, projname, deptno, respemp, prstaff, 
+         prstdate, prendate, majproj
+  from project;
+
+exec sql open cl;
+do idx = 1 to cnt;
+   prstaff = 0;       /* re-init */
+   prstdate = ' ';    /* re-init */
+   prendate = ' ';    /* re-init */
+   majproj = ' ';     /* re-init */
+   exec sql fetch cl into :projno, 
+                          :projname,
+                          :deptno, 
+                          :respemp, 
+                          :prstaff  :prstaff_ind,
+                          :prstdate :prstdate_ind,
+                          :prendate :prendate_ind,
+                          :majproj  :majproj_ind;
+   put edit (projno, projname, deptno, respemp, prstaff, prstdate,
+             prendate, majproj)
+            (a(6),x,a(24),x,a(3),x,a(6),x,f(5,2),x,a(10),x,a(10),x,a(6));
+   put skip;
+   end;
+
+ return;
+
+err_label:
+   msg_len = sqldb2err(200,0,sqlca,errmsg);
+   put skip list(substr(errmsg,1,msg_len));
+
+end sample1;
