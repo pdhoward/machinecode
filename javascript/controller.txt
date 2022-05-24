@@ -1,0 +1,151 @@
+const axios = require('axios')
+const {convertcode} = require('./functions')
+const logger = require('../utils/logger')
+const { GithubUrlError } = require("../middleware/errorhandler");
+let {obj} = require('./constants')
+const { g, b, gr, r, y } = require('../console');
+
+const getCode = (sourcerepo) => {
+
+  return new Promise((resolve, reject) => {
+    let {url, account, repo, branch, directory, fileName } = sourcerepo       
+    let endpoint = `${url}${account}/${repo}/${branch}/${directory}/${fileName}`
+        
+      axios.get(endpoint)
+        .then(response => {
+          console.log(g(`-----success - retrieved source code---`))           
+          resolve({status: 'success', data: response.data} )
+        })
+        .catch(error => {
+          // error passed up method chain for processing
+          next(new GithubUrlError(error))
+        })       
+      } 
+    )}
+  
+
+const decipherFunction = (e) => {
+        let source = e.config.source.language.toLowerCase()
+        let target = e.config.target.language.toLowerCase()
+        let fnc = `${source}2${target}`
+        return fnc
+}
+
+const extension = {
+  'cobol': 'txt',
+  'pl1': 'txt',
+  'python': 'py',
+  'java': 'java',
+  'ruby': 'erb',
+  'javascript': 'js',
+  'typescript': 'ts',
+  'go': 'go',
+  'php': 'php',
+  'html': 'html',
+  'css': 'css',
+  'powershell': 'ps1',
+  'perl': 'pl',
+  'sql': 'sql',
+  'mongodb': 'js',
+  'web': 'html'
+
+}
+
+
+module.exports = {
+	
+	// this function is behind the firewall
+	mainFunction: async (req, res) => {     
+    
+        /////////////////////////////////////////////////
+        /// initialize main data transport variable ////
+        ///////////////////////////////////////////////
+        
+        let sourceRepo = req.body.config.sourcerepo
+        obj = req.body
+                
+
+        ///////////////////////////////////////////////
+        /////   determine ai function to execute  ////
+        /////////////////////////////////////////////
+
+        let fnc = decipherFunction(req.body)
+        console.log(`The function is ${fnc}`)
+           
+             
+        /////////////////////////////////////////////
+        ///            Execute Function           //
+        ///////////////////////////////////////////        
+
+        //let fn = deciphered function name. Update mainstream object in prep for convertcode fn
+        let fn = obj.metadata.name
+        obj.metadata.decipheredfunction = fnc
+        const execSwitchFunction = (fn) => {
+
+          return new Promise(async (resolve, reject) => {
+           
+            let result
+            
+            let codeFile = await getCode(sourceRepo);
+
+                        
+            // the url passed from client was already validated so this would be an unusual condition
+            // but this check is here for testing purposes
+            if (codeFile.data.status == 'error') {  // note - response status from server is error or success
+              let message = codeFile.data.error.message
+              if (codeFile.data.error.status == 404) message = 'Request failed with status code of 404. Repository config most likely invalid.'
+              return reject(new Error(`${message} `))
+              // refactor to head to an error page
+              // navigate(`${Route.Workbench}`, {state: {event: e}, replace: false })
+            }
+            
+            let source = obj.config.source.language
+            let target = obj.config.target.language
+            let sourceext = extension[source]
+            let targetext = extension[target]
+                       
+            switch(fn) {
+
+                case 'A2A':
+                  obj.files = {}
+                  obj.files[`${source}.${sourceext}`] = {}
+                  obj.files[`${source}.${sourceext}`].name = `${source}.${sourceext}`
+                  obj.files[`${source}.${sourceext}`].language = `${source}`.toLowerCase()
+                  obj.files[`${source}.${sourceext}`].value = codeFile.data
+                  obj.fileName = `${source}.${sourceext}`
+                  result = await convertcode(obj)                     
+                  obj.files[`${target}.${targetext}`] = {}   
+                  obj.files[`${target}.${targetext}`].name = `${target}.${targetext}`
+                  obj.files[`${target}.${targetext}`].language = `${target}`.toLowerCase()
+                  obj.files[`${target}.${targetext}`].value = result
+                  break;
+               
+                default:
+                  obj.files = {}
+                  obj.files['README.md'] = {}
+                  obj.files['README.md'].name = 'README.md'
+                  obj.files['README.md'].language = 'MARKDOWN'
+                  obj.files['README.md'].value = `Conversion type not yet supported`
+                  obj.fileName = "README.md"
+                  break;
+            }
+
+            resolve(obj)
+
+
+          })
+            
+
+        }
+        //await execSwitchFunction(responseArray.data.answers[0])
+        let result = await execSwitchFunction(fn)
+                
+
+        ///////////////////////////////////////////////////
+        ///           WRAP AND RESPOND                  //
+        /////////////////////////////////////////////////  
+
+        res.send(result);
+		
+	}	
+}

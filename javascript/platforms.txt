@@ -1,0 +1,106 @@
+import * as React from 'react';
+import {
+  PageSection,
+  Title,  
+  Card,
+  CardBody,  
+  Button,  
+  Tabs,
+  Tab,
+  TabTitleText,
+  Level,
+  LevelItem,
+} from '@patternfly/react-core';
+import spacing from '@patternfly/react-styles/css/utilities/Spacing/spacing';
+import { useNavigate, useMatch } from 'react-router-dom';
+
+
+///////////////////convert to mongodb///////////////
+import {PLATFORM_TYPE_NAMES} from '../data/datasets'
+import { availableDatasetTypes } from '../data/datasets';
+import { inventory } from '../data/datasets';
+import { states } from '../data/datasets';
+///////////////////////////////////////////////
+import PlatformsTable from './components/PlatformsTable';
+
+export const EditDatasetContext = React.createContext({
+  // eslint-disable-next-line 
+  openEditDatasetModal: (_dataset) => undefined,
+  plans: [],
+});
+
+const PlatformsPage = () => {
+
+  let navigate = useNavigate()
+
+  const match = useMatch({
+    path: '/platforms/:datasetType',
+    strict: true,
+    sensitive: true,
+  });
+  
+
+  const areTabsVisible = true
+  const activeDatasetType = match?.params.datasetType || null;
+
+  React.useEffect(() => {
+      if (
+          (!activeDatasetType && availableDatasetTypes.length > 0) ||
+          (activeDatasetType && !availableDatasetTypes.includes(activeDatasetType))
+        )      
+        navigate(`/platforms/${availableDatasetTypes[0]}`);
+    });  
+
+  
+ 
+  return (
+    <>
+      <PageSection variant="light" className={areTabsVisible ? spacing.pb_0 : ''}>
+        <Level>
+          <LevelItem>
+            <Title headingLevel="h1">Platforms</Title>
+          </LevelItem>
+          <LevelItem>
+            <Button variant="secondary" >
+              Add inventory
+            </Button>
+          </LevelItem>
+        </Level>
+        
+        {areTabsVisible && (
+          <Tabs
+            activeKey={activeDatasetType || ''}
+            onSelect={(_event, tabKey) => navigate(`/platforms/${tabKey}`)}
+            className={spacing.mtSm}
+          >
+            {availableDatasetTypes.map((datasetType) => (
+              <Tab
+                key={datasetType}
+                eventKey={datasetType}
+                title={<TabTitleText>{PLATFORM_TYPE_NAMES[datasetType]}</TabTitleText>}
+              />
+            ))}
+          </Tabs>
+        )}
+      </PageSection>
+      <PageSection>
+      
+          <Card>
+            <CardBody>        
+              
+                <PlatformsTable                 
+                  activeDatasetType={activeDatasetType}
+                  inventory={inventory}
+                  states={states}
+                />
+                       
+            </CardBody>
+          </Card>
+      
+      </PageSection>
+      
+    </>
+  );
+};
+
+export default PlatformsPage;
