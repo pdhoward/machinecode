@@ -1,1 +1,2 @@
-const triple = (x=27) => x*3
+const manifold = (x=27) => x*5
+ manifold(20)
