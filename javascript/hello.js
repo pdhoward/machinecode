@@ -1,2 +1,2 @@
-const manifold = (x=27) => console.log('hello machines!)
- manifold(20)
+const manifold = () => console.log('hello machines!')
+ manifold()
